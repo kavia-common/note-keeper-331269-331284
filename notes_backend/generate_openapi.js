@@ -11,5 +11,6 @@ if (!fs.existsSync(outputDir)) {
 
 fs.writeFileSync(
   outputPath,
-  JSON.stringify(swaggerSpec, null, 2)
+  JSON.stringify(swaggerSpec, null, 2),
 );
+
