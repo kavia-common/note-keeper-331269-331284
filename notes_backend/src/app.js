@@ -12,12 +12,41 @@ const app = express();
 // Initialize DB early so failures are obvious at boot and not mid-request.
 getDb();
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-app.set('trust proxy', true);
+function parseCsvEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = parseCsvEnv('ALLOWED_ORIGINS', ['http://localhost:3000']);
+const allowedMethods = parseCsvEnv('ALLOWED_METHODS', ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']);
+const allowedHeaders = parseCsvEnv('ALLOWED_HEADERS', ['Content-Type', 'Authorization']);
+const corsMaxAge = Number(process.env.CORS_MAX_AGE || 0) || undefined;
+
+app.use(
+  cors({
+    /**
+     * Allow only configured origins (comma-separated in ALLOWED_ORIGINS).
+     * This enables the frontend (typically :3000) to call this backend (:3001).
+     */
+    origin(origin, callback) {
+      // Allow same-origin/non-browser requests (no Origin header).
+      if (!origin) return callback(null, true);
+
+      const isAllowed = allowedOrigins.includes(origin);
+      return callback(isAllowed ? null : new Error('CORS origin not allowed'), isAllowed);
+    },
+    methods: allowedMethods,
+    allowedHeaders,
+    maxAge: corsMaxAge,
+  })
+);
+
+// Some environments (including preview/proxy) require trust proxy for correct scheme/host.
+app.set('trust proxy', String(process.env.TRUST_PROXY || 'true').toLowerCase() !== 'false');
 
 app.get('/openapi.json', (req, res) => {
   // Provide a stable OpenAPI endpoint for tooling and the frontend.
